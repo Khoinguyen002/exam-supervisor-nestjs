@@ -1,7 +1,7 @@
-// src/prisma/prisma.service.ts
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
+import { DATABASE_URL } from 'src/common/config/env';
 
 @Injectable()
 export class PrismaService
@@ -10,7 +10,7 @@ export class PrismaService
 {
   constructor() {
     const adapter = new PrismaPg({
-      connectionString: process.env.DATABASE_URL,
+      connectionString: DATABASE_URL,
     });
     super({ adapter });
   }
