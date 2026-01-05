@@ -1,8 +1,11 @@
 import { Optional } from '@nestjs/common';
-import { Role } from '@prisma/client';
+import { Role, User } from '@prisma/client';
 import { IsEmail, IsEnum, IsString } from 'class-validator';
 
-export class CreateUserDto {
+export class CreateUserDto implements Omit<
+  User,
+  'password' | 'id' | 'createdAt'
+> {
   @IsEmail()
   email: string;
 
@@ -11,5 +14,8 @@ export class CreateUserDto {
 
   @Optional()
   @IsEnum(Role)
-  role?: Role;
+  role: Role = 'CANDIDATE';
+
+  @Optional()
+  refreshToken: string | null;
 }
