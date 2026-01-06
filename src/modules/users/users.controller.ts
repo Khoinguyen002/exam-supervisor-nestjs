@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import { type User as UserModal } from '@prisma/client';
 import { Roles } from 'src/modules/auth/decorators/roles.decorator';
-import { User } from 'src/modules/auth/decorators/user.decorator';
+import { User } from 'src/common/decorators/user.decorator';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto';
 import { UpdateUserPublicInfoDto } from './dto/update-user.dto';

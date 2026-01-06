@@ -1,10 +1,9 @@
-// src/auth/decorators/user.decorator.ts
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
 import type { User as UserModal } from '@prisma/client';
 
-export const User = createParamDecorator<UserModal>(
-  (_: unknown, ctx: ExecutionContext) => {
+export const User = createParamDecorator(
+  (key: keyof UserModal, ctx: ExecutionContext) => {
     const request = ctx.switchToHttp().getRequest();
-    return request.user;
+    return key ? request.user?.[key] : request.user;
   },
 );
