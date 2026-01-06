@@ -1,5 +1,5 @@
 import * as bcrypt from 'bcrypt';
-import { PrismaService } from '../src/prisma/prisma.service';
+import { PrismaService } from '../src/modules/prisma/prisma.service';
 import { PASSWORD_SALT } from 'src/common/config/env';
 
 const prisma = new PrismaService();

@@ -18,11 +18,104 @@ enum Role {
   ADMIN
 }
 
+enum ExamStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
 model User {
-  id            String   @id @default(uuid())
-  email         String   @unique
-  password      String
-  refreshToken  String? 
-  role          Role     @default(CANDIDATE)
-  createdAt     DateTime @default(now())
+  id           String        @id @default(uuid())
+  email        String        @unique
+  password     String
+  refreshToken String?
+  role         Role          @default(CANDIDATE)
+  createdAt    DateTime      @default(now())
+  examAttempts ExamAttempt[]
+  createdExams Exam[]        @relation("ExamCreatedBy")
+  updatedExams Exam[]        @relation("ExamUpdatedBy")
+}
+
+model Option {
+  id         String  @default(uuid())
+  questionId String
+  content    String
+  isCorrect  Boolean @default(false)
+
+  question Question @relation(fields: [questionId], references: [id])
+
+  @@id([id, questionId])
+}
+
+model Question {
+  id      String         @id @default(uuid())
+  content String
+  exams   ExamQuestion[]
+
+  options Option[]
+
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime?       @updatedAt
+  attemptAnswers AttemptAnswer[]
+}
+
+model ExamAttempt {
+  id     String @id @default(uuid())
+  userId String
+  examId String
+
+  score      Int?
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id])
+  exam Exam @relation(fields: [examId], references: [id])
+
+  answers AttemptAnswer[]
+
+  @@unique([userId, examId])
+}
+
+model AttemptAnswer {
+  attemptId  String
+  questionId String
+  optionId   String
+
+  attempt  ExamAttempt @relation(fields: [attemptId], references: [id])
+  question Question    @relation(fields: [questionId], references: [id])
+
+  @@id([attemptId, questionId])
+}
+
+model Exam {
+  id          String     @id @default(uuid())
+  title       String
+  description String?
+  duration    Int // minutes
+  passScore   Int
+  status      ExamStatus @default(DRAFT)
+
+  questions ExamQuestion[]
+  attempts  ExamAttempt[]
+
+  createdById String
+  createdBy   User    @relation("ExamCreatedBy", fields: [createdById], references: [id])
+  updatedById String?
+  updatedBy   User?   @relation("ExamUpdatedBy", fields: [updatedById], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime? @updatedAt
+}
+
+model ExamQuestion {
+  examId     String
+  questionId String
+  order      Int?
+  score      Int? @default(1)
+
+  exam     Exam     @relation(fields: [examId], references: [id])
+  question Question @relation(fields: [questionId], references: [id])
+
+  @@id([examId, questionId])
+  @@unique([examId, order])
 }
