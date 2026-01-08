@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Patch } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateExamDto } from './dto/create-exam.dto';
 import { UpdateExamDto } from './dto/update-exam.dto';
@@ -18,20 +18,28 @@ export class ExamsService {
       data: {
         ...dto,
         createdById: userId,
+        assignees: dto.assignees || [],
       },
     });
   }
 
-  async findAll({ page = 1, limit = 10 }: PaginationQueryDto) {
+  async findAll(user: User, { page = 1, limit = 10 }: PaginationQueryDto) {
     const skip = (page - 1) * limit;
+
+    // Build where clause based on user role
+    const where = user.role === 'ADMIN' ? {} : { createdById: user.id };
 
     const [items, total] = await this.prisma.$transaction([
       this.prisma.exam.findMany({
+        where,
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
+        include: {
+          questions: { include: { question: { include: { options: true } } } },
+        },
       }),
-      this.prisma.exam.count(),
+      this.prisma.exam.count({ where }),
     ]);
 
     return {

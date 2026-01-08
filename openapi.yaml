@@ -1,0 +1,1082 @@
+openapi: 3.0.3
+info:
+  title: Exam Supervisor API
+  description: A comprehensive examination management system built with NestJS
+  version: 1.0.0
+  contact:
+    name: Exam Supervisor Team
+
+servers:
+  - url: http://localhost:4000
+    description: Development server
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [CANDIDATE, EXAMINER, ADMIN]
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - email
+        - role
+        - createdAt
+
+    UserResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [CANDIDATE, EXAMINER, ADMIN]
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateUserDto:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 6
+        role:
+          type: string
+          enum: [CANDIDATE, EXAMINER, ADMIN]
+          default: CANDIDATE
+      required:
+        - email
+        - password
+
+    LoginDto:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+      required:
+        - email
+        - password
+
+    AuthResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        user:
+          $ref: '#/components/schemas/UserResponse'
+
+    Option:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        content:
+          type: string
+        isCorrect:
+          type: boolean
+      required:
+        - content
+        - isCorrect
+
+    CreateOptionDto:
+      type: object
+      properties:
+        content:
+          type: string
+        isCorrect:
+          type: boolean
+          default: false
+      required:
+        - content
+
+    Question:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        content:
+          type: string
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/Option'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - content
+        - options
+
+    CreateQuestionDto:
+      type: object
+      properties:
+        content:
+          type: string
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/CreateOptionDto'
+          minItems: 2
+      required:
+        - content
+        - options
+
+    Exam:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+        duration:
+          type: integer
+          description: Duration in minutes
+        passScore:
+          type: integer
+        status:
+          type: string
+          enum: [DRAFT, PUBLISHED, ARCHIVED]
+        assignees:
+          type: array
+          items:
+            type: string
+            format: email
+          description: List of email addresses assigned to take this exam
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        questions:
+          type: array
+          items:
+            type: object
+      required:
+        - id
+        - title
+        - duration
+        - passScore
+        - status
+
+    CreateExamDto:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        duration:
+          type: integer
+          minimum: 1
+        passScore:
+          type: integer
+          minimum: 0
+          maximum: 100
+        status:
+          type: string
+          enum: [DRAFT, PUBLISHED, ARCHIVED]
+          default: DRAFT
+        assignees:
+          type: array
+          items:
+            type: string
+            format: email
+          description: List of email addresses assigned to take this exam
+          default: []
+      required:
+        - title
+        - duration
+        - passScore
+
+    PaginationQueryDto:
+      type: object
+      properties:
+        page:
+          type: integer
+          minimum: 1
+          default: 1
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 10
+
+    PaginatedResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          default: true
+        data:
+          type: array
+          items: {}
+        meta:
+          type: object
+          properties:
+            total:
+              type: integer
+            page:
+              type: integer
+            limit:
+              type: integer
+            totalPages:
+              type: integer
+
+    ExamAttempt:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        examId:
+          type: string
+          format: uuid
+        score:
+          type: integer
+        startedAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: string
+          format: date-time
+
+    SubmitExamDto:
+      type: object
+      properties:
+        answers:
+          type: array
+          items:
+            type: object
+            properties:
+              questionId:
+                type: string
+                format: uuid
+              optionId:
+                type: string
+                format: uuid
+            required:
+              - questionId
+              - optionId
+      required:
+        - answers
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          default: false
+        error:
+          type: string
+        statusCode:
+          type: integer
+
+paths:
+  /auth/register:
+    post:
+      summary: Register a new user
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserDto'
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    default: true
+                  data:
+                    $ref: '#/components/schemas/UserResponse'
+
+  /auth/login:
+    post:
+      summary: User login
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginDto'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    default: true
+                  data:
+                    $ref: '#/components/schemas/AuthResponse'
+
+  /auth/refresh:
+    post:
+      summary: Refresh access token
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refresh_token:
+                  type: string
+              required:
+                - refresh_token
+      responses:
+        '200':
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    default: true
+                  data:
+                    type: object
+                    properties:
+                      access_token:
+                        type: string
+
+  /user/me:
+    get:
+      summary: Get current user profile
+      tags:
+        - Users
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User profile retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    default: true
+                  data:
+                    $ref: '#/components/schemas/UserResponse'
+
+  /user:
+    get:
+      summary: Get all users (Admin only)
+      tags:
+        - Users
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        '200':
+          description: Users retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/UserResponse'
+
+  /user/{id}:
+    patch:
+      summary: Update user profile
+      tags:
+        - Users
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: User updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    default: true
+                  data:
+                    $ref: '#/components/schemas/UserResponse'
+
+  /user/{id}/role:
+    patch:
+      summary: Update user role (Admin only)
+      tags:
+        - Users
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role:
+                  type: string
+                  enum: [CANDIDATE, EXAMINER, ADMIN]
+              required:
+                - role
+      responses:
+        '200':
+          description: User role updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    default: true
+                  data:
+                    $ref: '#/components/schemas/UserResponse'
+
+  /admin/questions:
+    post:
+      summary: Create a new question
+      tags:
+        - Questions
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateQuestionDto'
+      responses:
+        '201':
+          description: Question created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    default: true
+                  data:
+                    $ref: '#/components/schemas/Question'
+
+    get:
+      summary: Get all questions
+      tags:
+        - Questions
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Questions retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    default: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Question'
+
+  /admin/questions/{id}:
+    get:
+      summary: Get question by ID
+      tags:
+        - Questions
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Question retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    default: true
+                  data:
+                    $ref: '#/components/schemas/Question'
+
+    patch:
+      summary: Update question
+      tags:
+        - Questions
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content:
+                  type: string
+                options:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/CreateOptionDto'
+      responses:
+        '200':
+          description: Question updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    default: true
+                  data:
+                    $ref: '#/components/schemas/Question'
+
+    delete:
+      summary: Delete question
+      tags:
+        - Questions
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Question deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    default: true
+                  data:
+                    type: object
+
+  /admin/exams:
+    post:
+      summary: Create a new exam
+      tags:
+        - Exams
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateExamDto'
+      responses:
+        '201':
+          description: Exam created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    default: true
+                  data:
+                    $ref: '#/components/schemas/Exam'
+
+    get:
+      summary: Get exams (role-based filtering)
+      description: |
+        - ADMIN: Sees all exams
+        - EXAMINER: Sees only exams they created
+      tags:
+        - Exams
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        '200':
+          description: Exams retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Exam'
+
+  /admin/exams/{id}:
+    patch:
+      summary: Update exam
+      tags:
+        - Exams
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                description:
+                  type: string
+                duration:
+                  type: integer
+                passScore:
+                  type: integer
+      responses:
+        '200':
+          description: Exam updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    default: true
+                  data:
+                    $ref: '#/components/schemas/Exam'
+
+  /admin/exams/{id}/publish:
+    patch:
+      summary: Publish exam
+      tags:
+        - Exams
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Exam published successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    default: true
+                  data:
+                    $ref: '#/components/schemas/Exam'
+
+  /admin/exams/{id}/unpublish:
+    patch:
+      summary: Unpublish exam
+      tags:
+        - Exams
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Exam unpublished successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    default: true
+                  data:
+                    $ref: '#/components/schemas/Exam'
+
+  /admin/exams/{examId}/questions:
+    get:
+      summary: Get exam questions
+      tags:
+        - Exam Questions
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: examId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Exam questions retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    default: true
+                  data:
+                    type: array
+                    items:
+                      type: object
+
+    patch:
+      summary: Update exam questions
+      tags:
+        - Exam Questions
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: examId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                questions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      questionId:
+                        type: string
+                        format: uuid
+                      order:
+                        type: integer
+                      score:
+                        type: number
+              required:
+                - questions
+      responses:
+        '200':
+          description: Exam questions updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    default: true
+                  data:
+                    type: array
+                    items:
+                      type: object
+
+  /candidate/exams:
+    get:
+      summary: Get assigned exams for candidate
+      description: Get list of exams assigned to the current user
+      tags:
+        - Exam Attempts
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        '200':
+          description: Assigned exams retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                              format: uuid
+                            title:
+                              type: string
+                            description:
+                              type: string
+                            duration:
+                              type: integer
+                            passScore:
+                              type: integer
+                            createdAt:
+                              type: string
+                              format: date-time
+
+  /candidate/exams/{examId}/start:
+    post:
+      summary: Start exam attempt
+      tags:
+        - Exam Attempts
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: examId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '201':
+          description: Exam started successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    default: true
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      examId:
+                        type: string
+                        format: uuid
+                      startedAt:
+                        type: string
+                        format: date-time
+                      questions:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Question'
+
+  /candidate/exams/{examId}/submit:
+    post:
+      summary: Submit exam answers
+      tags:
+        - Exam Attempts
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: examId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitExamDto'
+      responses:
+        '200':
+          description: Exam submitted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    default: true
+                  data:
+                    $ref: '#/components/schemas/ExamAttempt'
+
+  /candidate/exams/{examId}/result:
+    get:
+      summary: Get exam result
+      tags:
+        - Exam Attempts
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: examId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Exam result retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    default: true
+                  data:
+                    allOf:
+                      - $ref: '#/components/schemas/ExamAttempt'
+                      - type: object
+                        properties:
+                          answers:
+                            type: array
+                            items:
+                              type: object

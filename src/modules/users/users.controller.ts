@@ -1,7 +1,17 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { type User as UserModal } from '@prisma/client';
 import { Roles } from 'src/modules/auth/decorators/roles.decorator';
 import { User } from 'src/common/decorators/user.decorator';
+import { ApiListResponse } from 'src/common/decorators/api-list-response.decorator';
+import { PaginationQueryDto } from 'src/common/dto/pagination-query.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto';
 import { UpdateUserPublicInfoDto } from './dto/update-user.dto';
@@ -13,9 +23,11 @@ import { plainToInstance } from 'class-transformer';
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
+  @Roles('ADMIN')
   @Get()
-  findAll() {
-    return this.usersService.findAll();
+  @ApiListResponse()
+  findAll(@Query() query: PaginationQueryDto) {
+    return this.usersService.findAll(query);
   }
 
   @Get('me')

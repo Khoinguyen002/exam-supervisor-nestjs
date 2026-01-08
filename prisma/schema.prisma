@@ -94,6 +94,7 @@ model Exam {
   duration    Int // minutes
   passScore   Int
   status      ExamStatus @default(DRAFT)
+  assignees   String[]   @default([]) // List of email addresses assigned to take this exam
 
   questions ExamQuestion[]
   attempts  ExamAttempt[]
@@ -111,7 +112,7 @@ model ExamQuestion {
   examId     String
   questionId String
   order      Int?
-  score      Int? @default(1)
+  score      Float? @default(1)
 
   exam     Exam     @relation(fields: [examId], references: [id])
   question Question @relation(fields: [questionId], references: [id])

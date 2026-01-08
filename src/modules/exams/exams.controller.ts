@@ -6,7 +6,6 @@ import {
   Patch,
   Post,
   Query,
-  UseGuards,
 } from '@nestjs/common';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { User } from '../../common/decorators/user.decorator';
@@ -14,7 +13,6 @@ import { ExamsService } from './exams.service';
 import { CreateExamDto } from './dto/create-exam.dto';
 import { UpdateExamDto } from './dto/update-exam.dto';
 import type { User as UserModal } from '@prisma/client';
-import { RolesGuard } from 'src/modules/auth/guards/roles.guard';
 import { ApiResponse } from 'src/common/decorators/api-response.decorator';
 import { PaginationQueryDto } from 'src/common/dto/pagination-query.dto';
 import { ApiListResponse } from 'src/common/decorators/api-list-response.decorator';
@@ -31,8 +29,8 @@ export class ExamsController {
 
   @Get()
   @ApiListResponse('List of exams')
-  findAll(@Query() query: PaginationQueryDto) {
-    return this.examsService.findAll(query);
+  findAll(@User() user: UserModal, @Query() query: PaginationQueryDto) {
+    return this.examsService.findAll(user, query);
   }
 
   @Patch(':id')

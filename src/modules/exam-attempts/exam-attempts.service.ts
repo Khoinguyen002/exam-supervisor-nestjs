@@ -1,12 +1,80 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { PaginationQueryDto } from 'src/common/dto/pagination-query.dto';
 import { SubmitExamDto } from './dto/submit-exam.dto';
 
 @Injectable()
 export class ExamAttemptsService {
   constructor(private prisma: PrismaService) {}
 
+  async getAssignedExams(
+    userId: string,
+    { page = 1, limit = 10 }: PaginationQueryDto,
+  ) {
+    // First get the user to check their email
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true },
+    });
+
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    const skip = (page - 1) * limit;
+
+    // Find exams where the user's email is in the assignees list and exam is published
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.exam.findMany({
+        where: {
+          status: 'PUBLISHED',
+          assignees: {
+            has: user.email,
+          },
+        },
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          duration: true,
+          passScore: true,
+          createdAt: true,
+          questions: true,
+        },
+      }),
+      this.prisma.exam.count({
+        where: {
+          status: 'PUBLISHED',
+          assignees: {
+            has: user.email,
+          },
+        },
+      }),
+    ]);
+
+    return {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
   async startExam(userId: string, examId: string) {
+    // First get the user to check their email
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true },
+    });
+
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
     const exam = await this.prisma.exam.findUnique({
       where: { id: examId },
       include: {
@@ -32,6 +100,11 @@ export class ExamAttemptsService {
 
     if (!exam || exam.status !== 'PUBLISHED') {
       throw new BadRequestException('Exam not available');
+    }
+
+    // Check if user's email is in the assignees list
+    if (exam.assignees.length > 0 && !exam.assignees.includes(user.email)) {
+      throw new BadRequestException('You are not assigned to take this exam');
     }
 
     const attempt = await this.prisma.examAttempt.upsert({

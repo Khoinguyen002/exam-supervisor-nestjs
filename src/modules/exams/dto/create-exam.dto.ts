@@ -1,4 +1,11 @@
-import { IsInt, IsNotEmpty, IsString } from 'class-validator';
+import {
+  IsArray,
+  IsEmail,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 
 export class CreateExamDto {
   @IsString()
@@ -12,5 +19,11 @@ export class CreateExamDto {
   passScore: number;
 
   @IsString()
+  @IsOptional()
   description?: string;
+
+  @IsArray()
+  @IsEmail({}, { each: true })
+  @IsOptional()
+  assignees?: string[] = []; // List of email addresses assigned to take this exam
 }

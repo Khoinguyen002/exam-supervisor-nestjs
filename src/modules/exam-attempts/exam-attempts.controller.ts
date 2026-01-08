@@ -1,6 +1,8 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Controller, Get, Param, Post, Query, Body } from '@nestjs/common';
 import { User } from '../../common/decorators/user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { ApiListResponse } from 'src/common/decorators/api-list-response.decorator';
+import { PaginationQueryDto } from 'src/common/dto/pagination-query.dto';
 import { SubmitExamDto } from './dto/submit-exam.dto';
 import { ExamAttemptsService } from './exam-attempts.service';
 
@@ -8,6 +10,16 @@ import { ExamAttemptsService } from './exam-attempts.service';
 @Roles('CANDIDATE')
 export class ExamAttemptsController {
   constructor(private readonly service: ExamAttemptsService) {}
+
+  // 0️⃣ Get assigned exams
+  @Get()
+  @ApiListResponse('Get assigned exams')
+  getAssignedExams(
+    @User('id') userId: string,
+    @Query() query: PaginationQueryDto,
+  ) {
+    return this.service.getAssignedExams(userId, query);
+  }
 
   // 1️⃣ Start exam
   @Post(':examId/start')

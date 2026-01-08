@@ -4,6 +4,10 @@ import { UpdateOptionDto } from './update-option.dto';
 
 export class UpdateQuestionDto {
   @IsString()
+  @IsOptional()
+  id: string;
+
+  @IsString()
   updatedAt: string;
 
   @IsOptional()

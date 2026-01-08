@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { PaginationQueryDto } from 'src/common/dto/pagination-query.dto';
 import { PrismaService } from 'src/modules/prisma/prisma.service';
 import { hashToken } from 'src/common/helper/token';
 
@@ -9,8 +10,31 @@ import { hashToken } from 'src/common/helper/token';
 export class UsersService {
   constructor(private prisma: PrismaService) {}
 
-  findAll() {
-    return this.prisma.user.findMany();
+  async findAll(query: PaginationQueryDto) {
+    const { page = 1, limit = 10 } = query;
+    const skip = (page - 1) * limit;
+
+    const [users, total] = await Promise.all([
+      this.prisma.user.findMany({
+        skip,
+        take: limit,
+        omit: {
+          password: true,
+          refreshToken: true,
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+      }),
+      this.prisma.user.count(),
+    ]);
+
+    return {
+      items: users,
+      total,
+      page,
+      limit,
+    };
   }
 
   async create(dto: CreateUserDto) {

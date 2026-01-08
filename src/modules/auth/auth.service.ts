@@ -13,8 +13,8 @@ export class AuthService {
     private usersService: UsersService,
   ) {}
 
-  private async issueTokens(userId: string) {
-    const payload = { sub: userId };
+  private async issueTokens(user: User) {
+    const payload = { sub: user.id, email: user.email, role: user.role };
 
     const accessToken = this.jwtService.sign(payload, {
       expiresIn: '15m',
@@ -24,7 +24,7 @@ export class AuthService {
       expiresIn: '7d',
     });
 
-    await this.usersService.update(userId, {
+    await this.usersService.update(user.id, {
       refreshToken: hashToken(refreshToken),
     });
 
@@ -39,7 +39,7 @@ export class AuthService {
       ...dto,
       refreshToken: null,
     });
-    return this.issueTokens(newUser.id);
+    return this.issueTokens(newUser);
   }
 
   async login(dto: LoginDto) {
@@ -49,7 +49,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    return this.issueTokens(user.id);
+    return this.issueTokens(user);
   }
 
   async refreshToken(refreshToken: string | null) {
@@ -71,7 +71,7 @@ export class AuthService {
       throw new UnauthorizedException();
     }
 
-    return this.issueTokens(user.id);
+    return this.issueTokens(user);
   }
 
   async logout(userId: string) {

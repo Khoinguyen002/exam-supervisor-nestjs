@@ -1,24 +1,18 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from 'src/modules/prisma/prisma.service';
-import { AttachQuestionDto } from './dto/attach-question.dto';
+import { AttachExamQuestionDto } from './dto/attach-exam-question.dto';
 import { UpdateExamQuestionsDto } from './dto/update-exam-question.dto';
 
 @Injectable()
 export class ExamQuestionsService {
   constructor(private prisma: PrismaService) {}
-  async attachQuestion(examId: string, dto: AttachQuestionDto) {
-    return this.prisma.examQuestion.create({
-      data: {
-        examId,
-        questionId: dto.questionId,
-        order: dto.order,
-        score: dto.score ?? 1,
-      },
-    });
-  }
 
-  async listQuestions(examId: string) {
-    const items = await this.prisma.examQuestion.findMany({
+  async listQuestions(
+    examId: string,
+    prisma: PrismaService | Prisma.TransactionClient = this.prisma,
+  ) {
+    const items = await prisma.examQuestion.findMany({
       where: { examId },
       include: {
         question: {
@@ -42,7 +36,34 @@ export class ExamQuestionsService {
         throw new BadRequestException('Duplicate question order');
       }
 
+      const existedQuestions = await tx.examQuestion.findMany({
+        where: { examId },
+        select: { questionId: true },
+      });
+
+      const toUpdateQuestions: AttachExamQuestionDto[] = [];
+      const toAttachQuestions: AttachExamQuestionDto[] = [];
+
       for (const q of dto.questions) {
+        if (
+          existedQuestions.some(
+            (existed) => existed.questionId === q.questionId,
+          )
+        ) {
+          toUpdateQuestions.push(q);
+        } else {
+          toAttachQuestions.push(q);
+        }
+      }
+
+      const toDeleteQuestions: string[] = existedQuestions
+        .filter(
+          (existed) =>
+            !dto.questions.some((q) => q.questionId === existed.questionId),
+        )
+        .map((existed) => existed.questionId);
+
+      for (const q of toUpdateQuestions) {
         await tx.examQuestion.update({
           where: {
             examId_questionId: {
@@ -57,18 +78,29 @@ export class ExamQuestionsService {
         });
       }
 
-      return this.listQuestions(examId);
-    });
-  }
+      for (const q of toAttachQuestions) {
+        await tx.examQuestion.create({
+          data: {
+            examId,
+            questionId: q.questionId,
+            order: q.order,
+            score: q.score ?? 1,
+          },
+        });
+      }
 
-  async detachQuestion(examId: string, questionId: string) {
-    return this.prisma.examQuestion.delete({
-      where: {
-        examId_questionId: {
-          examId,
-          questionId,
-        },
-      },
+      for (const q of toDeleteQuestions) {
+        await tx.examQuestion.delete({
+          where: {
+            examId_questionId: {
+              examId,
+              questionId: q,
+            },
+          },
+        });
+      }
+
+      return await this.listQuestions(examId, tx);
     });
   }
 }
