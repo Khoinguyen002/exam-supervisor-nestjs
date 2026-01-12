@@ -1,5 +1,6 @@
 import {
   IsArray,
+  IsDateString,
   IsEmail,
   IsInt,
   IsNotEmpty,
@@ -13,9 +14,6 @@ export class CreateExamDto {
   title: string;
 
   @IsInt()
-  duration: number; // minutes
-
-  @IsInt()
   passScore: number;
 
   @IsString()
@@ -26,4 +24,12 @@ export class CreateExamDto {
   @IsEmail({}, { each: true })
   @IsOptional()
   assignees?: string[] = []; // List of email addresses assigned to take this exam
+
+  @IsDateString()
+  @IsOptional()
+  startAt?: string;
+
+  @IsDateString()
+  @IsOptional()
+  endAt?: string;
 }

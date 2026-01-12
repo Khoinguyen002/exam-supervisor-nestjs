@@ -78,6 +78,22 @@ Content-Type: application/json
 
 ## User Management
 
+### Create User (Admin Only)
+
+**Roles:** ADMIN
+
+```http
+POST /user
+Authorization: Bearer <admin_token>
+Content-Type: application/json
+
+{
+  "email": "newuser@example.com",
+  "password": "password123",
+  "role": "EXAMINER"
+}
+```
+
 ### Get User Profile
 
 **Roles:** Any authenticated user
@@ -237,7 +253,8 @@ Content-Type: application/json
   "description": "Final exam for mathematics course",
   "duration": 120,
   "passScore": 70,
-  "status": "DRAFT"
+  "status": "DRAFT",
+  "assignees": ["student1@example.com", "student2@example.com"]
 }
 ```
 
@@ -266,6 +283,7 @@ Authorization: Bearer <token>
       "duration": 120,
       "passScore": 70,
       "status": "DRAFT",
+      "assignees": ["student1@example.com"],
       "createdAt": "2026-01-08T...",
       "questions": [...]
     }
@@ -345,6 +363,39 @@ Content-Type: application/json
 
 ## Exam Attempts (Candidates)
 
+### Get Assigned Exams
+
+**Roles:** CANDIDATE
+
+```http
+GET /candidate/exams?page=1&limit=10
+Authorization: Bearer <candidate_token>
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "exam_uuid",
+      "title": "Mathematics Final Exam",
+      "description": "Final exam for mathematics course",
+      "duration": 120,
+      "passScore": 70,
+      "createdAt": "2026-01-08T..."
+    }
+  ],
+  "meta": {
+    "total": 3,
+    "page": 1,
+    "limit": 10,
+    "totalPages": 1
+  }
+}
+```
+
 ### Start Exam
 
 **Roles:** CANDIDATE
@@ -363,7 +414,18 @@ Authorization: Bearer <candidate_token>
     "id": "attempt_uuid",
     "examId": "exam_uuid",
     "startedAt": "2026-01-08T...",
-    "questions": [...]
+    "questions": [
+      {
+        "id": "question_uuid",
+        "content": "What is the capital of France?",
+        "options": [
+          {
+            "id": "option_uuid",
+            "content": "Paris"
+          }
+        ]
+      }
+    ]
   }
 }
 ```
@@ -407,7 +469,13 @@ Authorization: Bearer <candidate_token>
     "score": 85,
     "startedAt": "2026-01-08T...",
     "finishedAt": "2026-01-08T...",
-    "answers": [...]
+    "answers": [
+      {
+        "questionId": "question_uuid",
+        "optionId": "option_uuid",
+        "isCorrect": true
+      }
+    ]
   }
 }
 ```
@@ -431,6 +499,170 @@ Common HTTP status codes:
 - `403` - Forbidden (insufficient permissions)
 - `404` - Not Found
 - `500` - Internal Server Error
+
+## Frontend Integration Guide
+
+### Authentication Flow
+
+1. **Register/Login**: Call `/auth/login` or `/auth/register` to get access token
+2. **Store Token**: Save the `access_token` in localStorage or secure storage
+3. **Include Token**: Add `Authorization: Bearer <token>` header to all authenticated requests
+4. **Token Refresh**: When token expires, use `/auth/refresh` with refresh_token
+
+### Role-Based UI
+
+```javascript
+// Check user role from login response
+const userRole = response.data.user.role;
+
+// Show/hide UI elements based on role
+if (userRole === 'ADMIN') {
+  // Show admin features
+} else if (userRole === 'EXAMINER') {
+  // Show examiner features
+} else if (userRole === 'CANDIDATE') {
+  // Show candidate features
+}
+```
+
+### API Client Setup
+
+```javascript
+// axios example
+const apiClient = axios.create({
+  baseURL: 'http://localhost:4000',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Add auth interceptor
+apiClient.interceptors.request.use((config) => {
+  const token = localStorage.getItem('access_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// Handle token refresh
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    if (error.response?.status === 401) {
+      // Token expired, try refresh
+      const refreshToken = localStorage.getItem('refresh_token');
+      if (refreshToken) {
+        try {
+          const refreshResponse = await axios.post('/auth/refresh', {
+            refresh_token: refreshToken,
+          });
+          const newToken = refreshResponse.data.data.access_token;
+          localStorage.setItem('access_token', newToken);
+          // Retry original request
+          error.config.headers.Authorization = `Bearer ${newToken}`;
+          return apiClient(error.config);
+        } catch (refreshError) {
+          // Refresh failed, redirect to login
+          window.location.href = '/login';
+        }
+      }
+    }
+    return Promise.reject(error);
+  },
+);
+```
+
+### Pagination Handling
+
+```javascript
+// Handle paginated responses
+const fetchUsers = async (page = 1, limit = 10) => {
+  const response = await apiClient.get(`/user?page=${page}&limit=${limit}`);
+  const { data, meta } = response.data;
+
+  return {
+    users: data,
+    pagination: {
+      currentPage: meta.page,
+      totalPages: meta.totalPages,
+      totalItems: meta.total,
+      hasNextPage: meta.page < meta.totalPages,
+      hasPrevPage: meta.page > 1,
+    },
+  };
+};
+```
+
+### Exam Taking Flow
+
+```javascript
+// 1. Get assigned exams
+const assignedExams = await apiClient.get('/candidate/exams');
+
+// 2. Start exam
+const startResponse = await apiClient.post(`/candidate/exams/${examId}/start`);
+const { questions, startedAt } = startResponse.data.data;
+
+// 3. Track time and answers
+let answers = [];
+const handleAnswerSelect = (questionId, optionId) => {
+  answers.push({ questionId, optionId });
+};
+
+// 4. Submit exam
+const submitResponse = await apiClient.post(
+  `/candidate/exams/${examId}/submit`,
+  {
+    answers,
+  },
+);
+
+// 5. Get result
+const resultResponse = await apiClient.get(`/candidate/exams/${examId}/result`);
+const { score, answers: resultAnswers } = resultResponse.data.data;
+```
+
+### Error Handling
+
+```javascript
+// Global error handler
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const { response } = error;
+    if (response) {
+      const { statusCode, error: errorMessage } = response.data;
+
+      switch (statusCode) {
+        case 400:
+          // Validation error
+          showValidationErrors(errorMessage);
+          break;
+        case 401:
+          // Unauthorized
+          redirectToLogin();
+          break;
+        case 403:
+          // Forbidden
+          showPermissionError();
+          break;
+        case 404:
+          // Not found
+          showNotFoundError();
+          break;
+        default:
+          // Other errors
+          showGenericError(errorMessage);
+      }
+    } else {
+      // Network error
+      showNetworkError();
+    }
+    return Promise.reject(error);
+  },
+);
+```
 
 ## Data Models
 
@@ -477,6 +709,7 @@ Common HTTP status codes:
   duration: number; // minutes
   passScore: number;
   status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+  assignees: string[]; // email addresses
   createdAt: Date;
   updatedAt?: Date;
   questions: ExamQuestion[];

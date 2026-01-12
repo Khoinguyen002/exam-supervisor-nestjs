@@ -63,11 +63,29 @@ export class QuestionsService {
     return this.prisma.$transaction(async (tx) => {
       const question = await tx.question.findUnique({
         where: { id },
-        include: { options: true },
+        include: {
+          options: true,
+          exams: {
+            include: {
+              exam: true,
+            },
+          },
+        },
       });
 
       if (!question) {
         throw new NotFoundException('Question not found');
+      }
+
+      // Check if question is used in any running exams
+      const runningExams = question.exams.filter(
+        (eq) => eq.exam.status === 'RUNNING',
+      );
+
+      if (runningExams.length > 0) {
+        throw new BadRequestException(
+          'Cannot edit question that is part of a running exam',
+        );
       }
 
       const existingOptions = question.options;

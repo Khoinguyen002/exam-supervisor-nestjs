@@ -42,14 +42,25 @@ export class ExamsController {
     return this.examsService.update(id, dto, user);
   }
 
+  @Post(':id/duplicate')
+  @ApiResponse('Exam duplicated successfully')
+  duplicate(@Param('id') id: string, @User() user: UserModal) {
+    return this.examsService.duplicate(id, user);
+  }
+
   @ApiResponse('Exam published')
   @Patch(':id/publish')
-  publish(@Param('id') id: string) {
-    return this.examsService.publish(id);
+  publish(@Param('id') id: string, @User() user: UserModal) {
+    return this.examsService.publish(id, user);
   }
 
   @Patch(':id/unpublish')
-  unPublish(@Param('id') id: string) {
-    return this.examsService.unPublish(id);
+  unPublish(@Param('id') id: string, @User() user: UserModal) {
+    return this.examsService.unPublish(id, user);
+  }
+
+  @Patch(':id/archive')
+  archive(@Param('id') id: string, @User() user: UserModal) {
+    return this.examsService.archive(id, user);
   }
 }

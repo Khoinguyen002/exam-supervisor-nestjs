@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { UsersModule } from './modules/users/users.module';
@@ -15,6 +16,7 @@ import { ExamAttemptsModule } from './modules/exam-attempts/exam-attempts.module
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     UsersModule,
     AuthModule,
     PrismaModule,

@@ -21,7 +21,16 @@ enum Role {
 enum ExamStatus {
   DRAFT
   PUBLISHED
+  RUNNING
+  ENDED
   ARCHIVED
+}
+
+enum ExamAttemptStatus {
+  CREATED
+  IN_PROGRESS
+  SUBMITTED
+  TERMINATED
 }
 
 model User {
@@ -63,6 +72,15 @@ model ExamAttempt {
   id     String @id @default(uuid())
   userId String
   examId String
+  status ExamAttemptStatus @default(CREATED)
+
+  // Exam snapshot at attempt creation
+  examTitle       String?
+  examDescription String?
+  duration        Int?
+  passScore       Int?
+  startAt         DateTime?
+  endAt           DateTime?
 
   score      Int?
   startedAt  DateTime  @default(now())
@@ -72,8 +90,34 @@ model ExamAttempt {
   exam Exam @relation(fields: [examId], references: [id])
 
   answers AttemptAnswer[]
+  questions ExamAttemptQuestion[]
 
   @@unique([userId, examId])
+}
+
+model ExamAttemptQuestion {
+  id         String @id @default(uuid())
+  attemptId  String
+  questionId String
+  order      Int?
+  score      Float? @default(1)
+
+  // Question snapshot
+  content String
+
+  attempt  ExamAttempt @relation(fields: [attemptId], references: [id])
+  options  ExamAttemptOption[]
+
+  @@unique([attemptId, order])
+}
+
+model ExamAttemptOption {
+  id         String @id @default(uuid())
+  questionId String
+  content    String
+  isCorrect  Boolean @default(false)
+
+  question ExamAttemptQuestion @relation(fields: [questionId], references: [id])
 }
 
 model AttemptAnswer {
@@ -91,10 +135,11 @@ model Exam {
   id          String     @id @default(uuid())
   title       String
   description String?
-  duration    Int // minutes
   passScore   Int
   status      ExamStatus @default(DRAFT)
   assignees   String[]   @default([]) // List of email addresses assigned to take this exam
+  startAt     DateTime?
+  endAt       DateTime?
 
   questions ExamQuestion[]
   attempts  ExamAttempt[]

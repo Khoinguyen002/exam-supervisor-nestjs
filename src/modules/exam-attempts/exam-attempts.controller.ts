@@ -1,18 +1,27 @@
-import { Controller, Get, Param, Post, Query, Body } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  Body,
+  Patch,
+} from '@nestjs/common';
 import { User } from '../../common/decorators/user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ApiListResponse } from 'src/common/decorators/api-list-response.decorator';
 import { PaginationQueryDto } from 'src/common/dto/pagination-query.dto';
 import { SubmitExamDto } from './dto/submit-exam.dto';
 import { ExamAttemptsService } from './exam-attempts.service';
+import type { User as UserModal } from '@prisma/client';
 
 @Controller('candidate/exams')
-@Roles('CANDIDATE')
 export class ExamAttemptsController {
   constructor(private readonly service: ExamAttemptsService) {}
 
   // 0️⃣ Get assigned exams
   @Get()
+  @Roles('CANDIDATE')
   @ApiListResponse('Get assigned exams')
   getAssignedExams(
     @User('id') userId: string,
@@ -23,12 +32,14 @@ export class ExamAttemptsController {
 
   // 1️⃣ Start exam
   @Post(':examId/start')
+  @Roles('CANDIDATE')
   startExam(@User('id') userId: string, @Param('examId') examId: string) {
     return this.service.startExam(userId, examId);
   }
 
   // 2️⃣ Submit exam
   @Post(':examId/submit')
+  @Roles('CANDIDATE')
   submitExam(
     @User('id') userId: string,
     @Param('examId') examId: string,
@@ -39,7 +50,18 @@ export class ExamAttemptsController {
 
   // 3️⃣ Get result
   @Get(':examId/result')
+  @Roles('CANDIDATE')
   getResult(@User('id') userId: string, @Param('examId') examId: string) {
     return this.service.getResult(userId, examId);
+  }
+
+  // 4️⃣ Terminate attempt (Admin/Examiner only)
+  @Patch('attempts/:attemptId/terminate')
+  @Roles('ADMIN', 'EXAMINER')
+  terminateAttempt(
+    @Param('attemptId') attemptId: string,
+    @User() user: UserModal,
+  ) {
+    return this.service.terminateAttempt(attemptId, user);
   }
 }
