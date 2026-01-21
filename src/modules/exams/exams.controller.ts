@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -62,5 +63,27 @@ export class ExamsController {
   @Patch(':id/archive')
   archive(@Param('id') id: string, @User() user: UserModal) {
     return this.examsService.archive(id, user);
+  }
+
+  @ApiResponse('Exam deleted successfully')
+  @Delete(':id')
+  remove(@Param('id') id: string, @User() user: UserModal) {
+    return this.examsService.remove(id, user);
+  }
+
+  @Get('statuses')
+  @ApiResponse('List of available exam statuses')
+  getStatuses() {
+    return this.examsService.getStatuses();
+  }
+
+  @Get(':id/attempts')
+  @ApiListResponse('List of exam attempts for the exam')
+  getExamAttempts(
+    @Param('id') id: string,
+    @Query() query: PaginationQueryDto,
+    @User() user: UserModal,
+  ) {
+    return this.examsService.getExamAttempts(id, query, user);
   }
 }

@@ -18,18 +18,57 @@ export class ExamsService {
     private eventEmitter: EventEmitter2,
   ) {}
 
-  create(userId: string, dto: CreateExamDto) {
-    return this.prisma.exam.create({
+  async create(userId: string, dto: CreateExamDto) {
+    const { questions, ...examData } = dto;
+
+    const exam = await this.prisma.exam.create({
       data: {
-        title: dto.title,
-        description: dto.description,
-        passScore: dto.passScore,
-        assignees: dto.assignees || [],
-        startAt: dto.startAt ? new Date(dto.startAt) : undefined,
-        endAt: dto.endAt ? new Date(dto.endAt) : undefined,
+        title: examData.title,
+        description: examData.description,
+        passScore: examData.passScore,
+        assignees: examData.assignees || [],
+        startAt: examData.startAt ? new Date(examData.startAt) : undefined,
+        endAt: examData.endAt ? new Date(examData.endAt) : undefined,
         createdById: userId,
       },
     });
+
+    // Handle questions creation if provided
+    if (questions && questions.length > 0) {
+      // Validate that all questions exist
+      const questionIds = questions.map((q) => q.questionId);
+      const existingQuestions = await this.prisma.question.findMany({
+        where: {
+          id: { in: questionIds },
+        },
+        select: { id: true },
+      });
+
+      const existingQuestionIds = new Set(existingQuestions.map((q) => q.id));
+      const invalidQuestionIds = questionIds.filter(
+        (id) => !existingQuestionIds.has(id),
+      );
+
+      if (invalidQuestionIds.length > 0) {
+        throw new BadRequestException(
+          `Invalid question IDs: ${invalidQuestionIds.join(', ')}`,
+        );
+      }
+
+      // Create exam-question relationships
+      for (const question of questions) {
+        await this.prisma.examQuestion.create({
+          data: {
+            examId: exam.id,
+            questionId: question.questionId,
+            score: question.score,
+            order: question.order || 0,
+          },
+        });
+      }
+    }
+
+    return exam;
   }
 
   async duplicate(id: string, user: User) {
@@ -78,20 +117,63 @@ export class ExamsService {
     return duplicatedExam;
   }
 
-  async findAll(user: User, { page = 1, limit = 10 }: PaginationQueryDto) {
+  async findAll(
+    user: User,
+    {
+      page = 1,
+      limit = 10,
+      title,
+      status,
+      startDate,
+      endDate,
+      createdBy,
+    }: PaginationQueryDto,
+  ) {
     const skip = (page - 1) * limit;
 
-    // Build where clause based on user role
-    const where = user.role === 'ADMIN' ? {} : { createdById: user.id };
+    // Build where clause based on user role and filters
+    const where: any = user.role === 'ADMIN' ? {} : { createdById: user.id };
+
+    // Add filters
+    if (title) {
+      where.title = {
+        contains: title,
+        mode: 'insensitive',
+      };
+    }
+
+    if (status) {
+      where.status = status;
+    }
+
+    if (startDate || endDate) {
+      where.createdAt = {};
+      if (startDate) {
+        where.createdAt.gte = new Date(startDate);
+      }
+      if (endDate) {
+        where.createdAt.lte = new Date(endDate);
+      }
+    }
+
+    if (createdBy) {
+      where.createdBy = {
+        email: {
+          contains: createdBy,
+          mode: 'insensitive',
+        },
+      };
+    }
 
     const [items, total] = await this.prisma.$transaction([
       this.prisma.exam.findMany({
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { updatedAt: 'desc' },
         include: {
           questions: { include: { question: { include: { options: true } } } },
+          createdBy: { select: { email: true } },
         },
       }),
       this.prisma.exam.count({ where }),
@@ -115,15 +197,78 @@ export class ExamsService {
       throw new BadRequestException('Cannot edit an exam that has ended');
     }
 
-    return this.prisma.exam.update({
+    const { questions, ...examData } = dto;
+
+    const updatedExam = await this.prisma.exam.update({
       where: { id },
       data: {
-        ...dto,
+        ...examData,
         updatedById: author.id,
         startAt: dto.startAt ? new Date(dto.startAt) : exam.startAt,
         endAt: dto.endAt ? new Date(dto.endAt) : exam.endAt,
       },
     });
+
+    // Handle questions update if provided
+    if (questions !== undefined) {
+      // Get existing questions for this exam
+      const existingQuestions = await this.prisma.examQuestion.findMany({
+        where: { examId: id },
+        select: { examId: true, questionId: true, order: true },
+      });
+
+      const existingQuestionIds = new Set(
+        existingQuestions.map((eq) => eq.questionId),
+      );
+      const providedQuestionIds = new Set(questions.map((q) => q.questionId));
+
+      // Delete questions that are no longer in the provided list
+      const questionsToDelete = existingQuestions.filter(
+        (eq) => !providedQuestionIds.has(eq.questionId),
+      );
+
+      if (questionsToDelete.length > 0) {
+        await this.prisma.examQuestion.deleteMany({
+          where: {
+            OR: questionsToDelete.map((eq) => ({
+              examId: eq.examId,
+              questionId: eq.questionId,
+            })),
+          },
+        });
+      }
+
+      // Create or update questions
+      for (const question of questions) {
+        if (existingQuestionIds.has(question.questionId)) {
+          // Update existing question
+          await this.prisma.examQuestion.update({
+            where: {
+              examId_questionId: {
+                examId: id,
+                questionId: question.questionId,
+              },
+            },
+            data: {
+              score: question.score,
+              order: question.order,
+            },
+          });
+        } else {
+          // Create new question association
+          await this.prisma.examQuestion.create({
+            data: {
+              examId: id,
+              questionId: question.questionId,
+              score: question.score,
+              order: question.order,
+            },
+          });
+        }
+      }
+    }
+
+    return updatedExam;
   }
 
   async publish(id: string, user: User) {
@@ -209,6 +354,29 @@ export class ExamsService {
     });
   }
 
+  async remove(id: string, user: User) {
+    const exam = await this.prisma.exam.findUnique({ where: { id } });
+    if (!exam) throw new NotFoundException('Exam not found');
+
+    // Authorization check
+    if (user.role !== 'ADMIN' && exam.createdById !== user.id) {
+      throw new ForbiddenException(
+        'Only admin or exam creator can delete exam',
+      );
+    }
+
+    // Validation: can only delete from DRAFT or ARCHIVED
+    if (!['DRAFT', 'ARCHIVED'].includes(exam.status)) {
+      throw new BadRequestException(
+        `Cannot delete exam with status ${exam.status}`,
+      );
+    }
+
+    return this.prisma.exam.delete({
+      where: { id },
+    });
+  }
+
   // System method to automatically transition states based on time
   async checkAndUpdateExamStates() {
     const now = new Date();
@@ -230,5 +398,115 @@ export class ExamsService {
       },
       data: { status: 'ENDED' },
     });
+  }
+
+  getStatuses() {
+    // Return the enum values as defined in the schema
+    return [
+      { value: 'DRAFT', label: 'Draft' },
+      { value: 'PUBLISHED', label: 'Published' },
+      { value: 'RUNNING', label: 'Running' },
+      { value: 'ENDED', label: 'Ended' },
+      { value: 'ARCHIVED', label: 'Archived' },
+    ];
+  }
+
+  async getExamAttempts(
+    examId: string,
+    { page = 1, limit = 10 }: PaginationQueryDto,
+    user: User,
+  ) {
+    const exam = await this.prisma.exam.findUnique({
+      where: { id: examId },
+    });
+
+    if (!exam) {
+      throw new NotFoundException('Exam not found');
+    }
+
+    // Authorization check
+    if (user.role !== 'ADMIN' && exam.createdById !== user.id) {
+      throw new ForbiddenException(
+        'Only admin or exam creator can view attempts',
+      );
+    }
+
+    const skip = (page - 1) * limit;
+
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.examAttempt.findMany({
+        where: { examId },
+        skip,
+        take: limit,
+        orderBy: { startedAt: 'desc' },
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+            },
+          },
+          questions: {
+            include: {
+              options: true,
+            },
+            orderBy: { order: 'asc' },
+          },
+          answers: true,
+        },
+      }),
+      this.prisma.examAttempt.count({
+        where: { examId },
+      }),
+    ]);
+
+    // Transform the data to include detailed question/answer information
+    const transformedItems = items.map((attempt: any) => {
+      const answersMap = new Map(
+        attempt.answers.map((a: any) => [a.questionId, a.optionId]),
+      );
+
+      const questionsWithAnswers = attempt.questions.map((q) => {
+        const selectedOptionId = answersMap.get(q.questionId);
+        const selectedOption = selectedOptionId
+          ? q.options.find((opt) => opt.id === selectedOptionId) || null
+          : null;
+        const isCorrect = selectedOption?.isCorrect || false;
+
+        return {
+          id: q.id,
+          questionId: q.questionId,
+          order: q.order,
+          score: q.score,
+          content: q.content,
+          selectedOption: selectedOption
+            ? {
+                id: selectedOption.id,
+                content: selectedOption.content,
+                isCorrect: selectedOption.isCorrect,
+              }
+            : null,
+          isCorrect,
+          allOptions: q.options.map((opt) => ({
+            id: opt.id,
+            content: opt.content,
+            isCorrect: opt.isCorrect,
+          })),
+        };
+      });
+
+      return {
+        ...attempt,
+        questions: questionsWithAnswers,
+      };
+    });
+
+    return {
+      items: transformedItems,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 }
