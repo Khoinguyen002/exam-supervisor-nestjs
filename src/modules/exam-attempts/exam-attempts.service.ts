@@ -130,6 +130,7 @@ export class ExamAttemptsService {
           passScore: exam.passScore,
           startAt: exam.startAt,
           endAt: exam.endAt,
+          duration: 60, // Default 60 minutes
         },
         include: {
           questions: true,
@@ -205,13 +206,19 @@ export class ExamAttemptsService {
           passScore: attempt.passScore,
           startAt: attempt.startAt,
           endAt: attempt.endAt,
+          duration: attempt.duration,
           questions: attemptWithSnapshot?.questions.map((q) => ({
-            id: q.id,
-            content: q.content,
-            options: q.options.map((opt) => ({
-              id: opt.id,
-              content: opt.content,
-            })),
+            questionId: q.questionId,
+            score: q.score,
+            order: q.order,
+            question: {
+              id: q.questionId,
+              content: q.content,
+              options: q.options.map((opt) => ({
+                id: opt.id,
+                content: opt.content,
+              })),
+            },
           })),
         },
       };

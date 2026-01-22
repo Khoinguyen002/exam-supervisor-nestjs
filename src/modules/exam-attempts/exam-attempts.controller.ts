@@ -54,14 +54,4 @@ export class ExamAttemptsController {
   getResult(@User('id') userId: string, @Param('examId') examId: string) {
     return this.service.getResult(userId, examId);
   }
-
-  // 4️⃣ Terminate attempt (Admin/Examiner only)
-  @Patch('attempts/:attemptId/terminate')
-  @Roles('ADMIN', 'EXAMINER')
-  terminateAttempt(
-    @Param('attemptId') attemptId: string,
-    @User() user: UserModal,
-  ) {
-    return this.service.terminateAttempt(attemptId, user);
-  }
 }

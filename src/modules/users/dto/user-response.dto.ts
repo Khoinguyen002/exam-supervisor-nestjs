@@ -1,10 +1,9 @@
 import { Exclude } from 'class-transformer';
-import { UpdateUserDto } from './update-user.dto';
 
-export class UserResponseDto extends UpdateUserDto {
+export class UserResponseDto {
   @Exclude()
   password: string;
 
   @Exclude()
-  refreshToken: string;
+  refreshToken: string | null;
 }

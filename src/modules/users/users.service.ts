@@ -44,6 +44,7 @@ export class UsersService {
       data: {
         email: dto.email,
         password: passwordHash,
+        role: dto.role,
       },
     });
   }

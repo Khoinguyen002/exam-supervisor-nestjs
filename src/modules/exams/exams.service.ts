@@ -372,9 +372,19 @@ export class ExamsService {
       );
     }
 
-    return this.prisma.exam.delete({
-      where: { id },
-    });
+    await this.prisma.$transaction([
+      this.prisma.examQuestion.deleteMany({
+        where: { examId: id },
+      }),
+      this.prisma.examAttempt.deleteMany({
+        where: { examId: id },
+      }),
+      this.prisma.exam.delete({
+        where: { id },
+      }),
+    ]);
+
+    return 'success';
   }
 
   // System method to automatically transition states based on time
@@ -508,5 +518,38 @@ export class ExamsService {
       limit,
       totalPages: Math.ceil(total / limit),
     };
+  }
+
+  async terminateAttempt(attemptId: string, user: User) {
+    const attempt = await this.prisma.examAttempt.findUnique({
+      where: { id: attemptId },
+      include: { exam: true },
+    });
+
+    if (!attempt) {
+      throw new BadRequestException('Attempt not found');
+    }
+
+    // Authorization check
+    if (user.role !== 'ADMIN' && attempt.exam.createdById !== user.id) {
+      throw new ForbiddenException(
+        'Only admin or exam creator can terminate attempts',
+      );
+    }
+
+    // Validation: can only terminate IN_PROGRESS attempts
+    if (attempt.status !== 'IN_PROGRESS') {
+      throw new BadRequestException(
+        `Cannot terminate attempt with status ${attempt.status}`,
+      );
+    }
+
+    return this.prisma.examAttempt.update({
+      where: { id: attemptId },
+      data: {
+        status: 'TERMINATED',
+        finishedAt: new Date(),
+      },
+    });
   }
 }

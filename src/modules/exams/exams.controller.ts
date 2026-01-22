@@ -86,4 +86,13 @@ export class ExamsController {
   ) {
     return this.examsService.getExamAttempts(id, query, user);
   }
+
+  @Patch('attempts/:attemptId/terminate')
+  @ApiResponse('Exam attempt terminated successfully')
+  terminateAttempt(
+    @Param('attemptId') attemptId: string,
+    @User() user: UserModal,
+  ) {
+    return this.examsService.terminateAttempt(attemptId, user);
+  }
 }

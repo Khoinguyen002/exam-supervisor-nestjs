@@ -35,10 +35,7 @@ export class AuthService {
   }
 
   async register(dto: RegisterDto) {
-    const newUser = await this.usersService.create({
-      ...dto,
-      refreshToken: null,
-    });
+    const newUser = await this.usersService.create(dto);
     return this.issueTokens(newUser);
   }
 

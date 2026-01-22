@@ -14,17 +14,17 @@ import { ApiListResponse } from 'src/common/decorators/api-list-response.decorat
 import { PaginationQueryDto } from 'src/common/dto/pagination-query.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto';
-import { UpdateUserPublicInfoDto } from './dto/update-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 import { UsersService } from './users.service';
 import { UserResponseDto } from './dto/user-response.dto';
 import { plainToInstance } from 'class-transformer';
 
-@Controller('user')
+@Controller('')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Roles('ADMIN')
-  @Get()
+  @Get('admin/users')
   @ApiListResponse()
   findAll(@Query() query: PaginationQueryDto) {
     return this.usersService.findAll(query);
@@ -35,21 +35,24 @@ export class UsersController {
     return plainToInstance(UserResponseDto, user);
   }
 
-  @Post()
-  create(@Body() body: CreateUserDto) {
-    this.usersService.create(body);
+  @Post('admin/users')
+  @Roles('ADMIN')
+  async create(@Body() body: CreateUserDto): Promise<UserResponseDto> {
+    const user = await this.usersService.create(body);
+    return plainToInstance(UserResponseDto, user);
   }
 
-  @Patch(':id')
+  @Roles('ADMIN')
+  @Patch('admin/users/:id')
   update(
     @Param('id') id: string,
-    @Body() body: UpdateUserPublicInfoDto,
+    @Body() body: UpdateUserDto,
   ): UserResponseDto {
     return plainToInstance(UserResponseDto, this.usersService.update(id, body));
   }
 
   @Roles('ADMIN')
-  @Patch(':id/role')
+  @Patch('admin/users/:id/role')
   updateRole(
     @Param('id') id: string,
     @Body() body: UpdateUserRoleDto,

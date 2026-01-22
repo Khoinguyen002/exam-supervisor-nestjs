@@ -40,6 +40,7 @@ model User {
   refreshToken String?
   role         Role          @default(CANDIDATE)
   createdAt    DateTime      @default(now())
+  updatedAt    DateTime?     @updatedAt
   examAttempts ExamAttempt[]
   createdExams Exam[]        @relation("ExamCreatedBy")
   updatedExams Exam[]        @relation("ExamUpdatedBy")
