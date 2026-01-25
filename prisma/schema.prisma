@@ -60,17 +60,17 @@ model Option {
 model Question {
   id      String         @id @default(uuid())
   content String
+  tags    String[]       @default([])
   exams   ExamQuestion[]
 
   options Option[]
 
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime?       @updatedAt
-  attemptAnswers AttemptAnswer[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime? @updatedAt
 }
 
 model ExamAttempt {
-  id     String @id @default(uuid())
+  id     String            @id @default(uuid())
   userId String
   examId String
   status ExamAttemptStatus @default(CREATED)
@@ -90,7 +90,6 @@ model ExamAttempt {
   user User @relation(fields: [userId], references: [id])
   exam Exam @relation(fields: [examId], references: [id])
 
-  answers AttemptAnswer[]
   questions ExamAttemptQuestion[]
 
   @@unique([userId, examId])
@@ -105,31 +104,23 @@ model ExamAttemptQuestion {
 
   // Question snapshot
   content String
+  tags    String[]
 
-  attempt  ExamAttempt @relation(fields: [attemptId], references: [id])
-  options  ExamAttemptOption[]
+  attempt ExamAttempt         @relation(fields: [attemptId], references: [id])
+  options ExamAttemptOption[]
 
   @@unique([attemptId, order])
 }
 
 model ExamAttemptOption {
-  id         String @id @default(uuid())
-  questionId String
-  content    String
-  isCorrect  Boolean @default(false)
+  id               String  @id @default(uuid())
+  questionId       String
+  originalOptionId String?
+  content          String
+  isCorrect        Boolean @default(false)
+  isSelected       Boolean @default(false)
 
   question ExamAttemptQuestion @relation(fields: [questionId], references: [id])
-}
-
-model AttemptAnswer {
-  attemptId  String
-  questionId String
-  optionId   String
-
-  attempt  ExamAttempt @relation(fields: [attemptId], references: [id])
-  question Question    @relation(fields: [questionId], references: [id])
-
-  @@id([attemptId, questionId])
 }
 
 model Exam {

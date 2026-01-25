@@ -180,7 +180,32 @@ export class QuestionsService {
   }
 
   async remove(id: string) {
-    await this.findOne(id);
+    const question = await this.prisma.question.findUnique({
+      where: { id },
+      include: {
+        exams: {
+          include: {
+            exam: true,
+          },
+        },
+      },
+    });
+
+    if (!question) {
+      throw new NotFoundException('Question not found');
+    }
+
+    // Check if question is used in any running exams
+    const runningExams = question.exams.filter(
+      (eq) => eq.exam.status === 'RUNNING',
+    );
+
+    if (runningExams.length > 0) {
+      throw new BadRequestException(
+        'Cannot delete question that is part of a running exam',
+      );
+    }
+
     return this.prisma.question.delete({ where: { id } });
   }
 }

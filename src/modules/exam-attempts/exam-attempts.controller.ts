@@ -33,8 +33,8 @@ export class ExamAttemptsController {
   // 1️⃣ Start exam
   @Post(':examId/start')
   @Roles('CANDIDATE')
-  startExam(@User('id') userId: string, @Param('examId') examId: string) {
-    return this.service.startExam(userId, examId);
+  startExam(@User() user: UserModal, @Param('examId') examId: string) {
+    return this.service.startExam(user, examId);
   }
 
   // 2️⃣ Submit exam

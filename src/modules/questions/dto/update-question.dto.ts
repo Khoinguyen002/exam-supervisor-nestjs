@@ -15,6 +15,11 @@ export class UpdateQuestionDto {
   content?: string;
 
   @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  tags?: string[];
+
+  @IsArray()
   @ValidateNested({ each: true })
   @Type(() => UpdateOptionDto)
   options: UpdateOptionDto[];

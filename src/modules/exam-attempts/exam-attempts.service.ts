@@ -6,7 +6,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { PaginationQueryDto } from 'src/common/dto/pagination-query.dto';
 import { SubmitExamDto } from './dto/submit-exam.dto';
-import { User } from '@prisma/client';
+import type { User } from '@prisma/client';
 
 @Injectable()
 export class ExamAttemptsService {
@@ -28,11 +28,13 @@ export class ExamAttemptsService {
 
     const skip = (page - 1) * limit;
 
-    // Find exams where the user's email is in the assignees list and exam is RUNNING (active)
+    // Find exams where the user's email is in the assignees list and exam is RUNNING, PUBLISHED, or ENDED
     const [items, total] = await this.prisma.$transaction([
       this.prisma.exam.findMany({
         where: {
-          status: 'RUNNING',
+          status: {
+            in: ['RUNNING', 'PUBLISHED', 'ENDED'],
+          },
           assignees: {
             has: user.email,
           },
@@ -48,12 +50,15 @@ export class ExamAttemptsService {
           createdAt: true,
           startAt: true,
           endAt: true,
+          status: true,
           questions: true,
         },
       }),
       this.prisma.exam.count({
         where: {
-          status: 'RUNNING',
+          status: {
+            in: ['RUNNING', 'PUBLISHED', 'ENDED'],
+          },
           assignees: {
             has: user.email,
           },
@@ -61,8 +66,62 @@ export class ExamAttemptsService {
       }),
     ]);
 
+    // Get attempt information for each exam
+    const examIds = items.map((exam) => exam.id);
+    const attempts = await this.prisma.examAttempt.findMany({
+      where: {
+        userId,
+        examId: { in: examIds },
+      },
+      select: {
+        examId: true,
+        status: true,
+        finishedAt: true,
+        score: true,
+      },
+    });
+
+    // Create a map of examId to attempt info
+    const attemptMap = new Map();
+    attempts.forEach((attempt) => {
+      attemptMap.set(attempt.examId, attempt);
+    });
+
+    // Add attempt status to each exam
+    const itemsWithAttemptStatus = items.map((exam) => {
+      const attempt = attemptMap.get(exam.id);
+      let attemptStatus = 'NOT_ATTEMPTED';
+
+      // For PUBLISHED exams, show as incoming/upcoming
+      if (exam.status === 'PUBLISHED') {
+        attemptStatus = 'UPCOMING';
+      }
+      // For ENDED exams, show as ended (regardless of attempt status)
+      else if (exam.status === 'ENDED') {
+        attemptStatus = 'ENDED';
+      }
+      // For RUNNING exams, check attempt status
+      else if (exam.status === 'RUNNING') {
+        if (attempt) {
+          if (attempt.status === 'SUBMITTED' || attempt.finishedAt) {
+            attemptStatus = 'COMPLETED';
+          } else if (attempt.status === 'IN_PROGRESS') {
+            attemptStatus = 'IN_PROGRESS';
+          } else if (attempt.status === 'TERMINATED') {
+            attemptStatus = 'TERMINATED';
+          }
+        }
+      }
+
+      return {
+        ...exam,
+        attemptStatus,
+        attemptScore: attempt?.score || null,
+      };
+    });
+
     return {
-      items,
+      items: itemsWithAttemptStatus,
       total,
       page,
       limit,
@@ -70,13 +129,7 @@ export class ExamAttemptsService {
     };
   }
 
-  async startExam(userId: string, examId: string) {
-    // First get the user to check their email
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { email: true },
-    });
-
+  async startExam(user: User, examId: string) {
     if (!user) {
       throw new BadRequestException('User not found');
     }
@@ -109,7 +162,7 @@ export class ExamAttemptsService {
     return this.prisma.$transaction(async (tx) => {
       const attempt = await tx.examAttempt.upsert({
         where: {
-          userId_examId: { userId, examId },
+          userId_examId: { userId: user.id, examId },
         },
         update: {
           status: 'IN_PROGRESS', // Transition from CREATED to IN_PROGRESS
@@ -121,7 +174,7 @@ export class ExamAttemptsService {
           endAt: exam.endAt,
         },
         create: {
-          userId,
+          userId: user.id,
           examId,
           status: 'IN_PROGRESS',
           // Create snapshot
@@ -130,73 +183,23 @@ export class ExamAttemptsService {
           passScore: exam.passScore,
           startAt: exam.startAt,
           endAt: exam.endAt,
-          duration: 60, // Default 60 minutes
         },
         include: {
           questions: true,
         },
       });
 
+      // Check if attempt was already submitted
+      if (attempt.status === 'SUBMITTED' || attempt.finishedAt) {
+        throw new BadRequestException('Exam already submitted');
+      }
+
       // Check if attempt was already terminated
       if (attempt.status === 'TERMINATED') {
         throw new BadRequestException('Exam attempt has been terminated');
       }
 
-      // If this is the first time starting the exam, create question snapshots
-      if (attempt.questions.length === 0) {
-        const questionSnapshots = exam.questions.map((eq) => ({
-          attemptId: attempt.id,
-          questionId: eq.questionId,
-          order: eq.order,
-          score: eq.score,
-          content: eq.question.content,
-        }));
-
-        await tx.examAttemptQuestion.createMany({
-          data: questionSnapshots,
-        });
-
-        // Create option snapshots for each question
-        for (const eq of exam.questions) {
-          const optionSnapshots = eq.question.options.map((option) => ({
-            questionId: eq.questionId, // This should be the attempt question id, but we need to get it
-            content: option.content,
-            isCorrect: option.isCorrect,
-          }));
-
-          // Get the created attempt question to link options
-          const attemptQuestion = await tx.examAttemptQuestion.findFirst({
-            where: {
-              attemptId: attempt.id,
-              questionId: eq.questionId,
-            },
-          });
-
-          if (attemptQuestion) {
-            const optionsWithQuestionId = optionSnapshots.map((opt) => ({
-              ...opt,
-              questionId: attemptQuestion.id,
-            }));
-            await tx.examAttemptOption.createMany({
-              data: optionsWithQuestionId,
-            });
-          }
-        }
-      }
-
-      // Return data with snapshot
-      const attemptWithSnapshot = await tx.examAttempt.findUnique({
-        where: { id: attempt.id },
-        include: {
-          questions: {
-            include: {
-              options: true,
-            },
-            orderBy: { order: 'asc' },
-          },
-        },
-      });
-
+      // Return exam data directly from the original exam
       return {
         attemptId: attempt.id,
         exam: {
@@ -207,14 +210,15 @@ export class ExamAttemptsService {
           startAt: attempt.startAt,
           endAt: attempt.endAt,
           duration: attempt.duration,
-          questions: attemptWithSnapshot?.questions.map((q) => ({
-            questionId: q.questionId,
-            score: q.score,
-            order: q.order,
+          questions: exam.questions.map((eq) => ({
+            questionId: eq.questionId,
+            score: eq.score,
+            order: eq.order,
             question: {
-              id: q.questionId,
-              content: q.content,
-              options: q.options.map((opt) => ({
+              id: eq.questionId,
+              content: eq.question.content,
+              tags: eq.question.tags,
+              options: eq.question.options.map((opt) => ({
                 id: opt.id,
                 content: opt.content,
               })),
@@ -238,9 +242,19 @@ export class ExamAttemptsService {
         include: {
           exam: {
             include: {
-              questions: true,
+              questions: {
+                include: {
+                  question: {
+                    include: {
+                      options: true,
+                    },
+                  },
+                },
+                orderBy: { order: 'asc' },
+              },
             },
           },
+          questions: true,
         },
       });
 
@@ -252,35 +266,121 @@ export class ExamAttemptsService {
         throw new BadRequestException('Exam already submitted');
       }
 
-      // Save answers
-      await tx.attemptAnswer.createMany({
-        data: dto.answers.map((a) => ({
+      // Create question and option snapshots if not already created
+      if (attempt.questions.length === 0) {
+        const questionSnapshots = attempt.exam.questions.map((eq) => ({
           attemptId: attempt.id,
-          questionId: a.questionId,
-          optionId: a.optionId,
-        })),
-      });
+          questionId: eq.questionId,
+          order: eq.order,
+          score: eq.score,
+          content: eq.question.content,
+          tags: eq.question.tags,
+        }));
+
+        await tx.examAttemptQuestion.createMany({
+          data: questionSnapshots,
+        });
+
+        // Create option snapshots for each question
+        for (const eq of attempt.exam.questions) {
+          const optionSnapshots = eq.question.options.map((option) => ({
+            content: option.content,
+            isCorrect: option.isCorrect,
+            originalOptionId: option.id,
+            questionId: eq.questionId, // This will be updated after creating attempt questions
+          }));
+
+          // Get the created attempt question to link options
+          const attemptQuestion = await tx.examAttemptQuestion.findFirst({
+            where: {
+              attemptId: attempt.id,
+              questionId: eq.questionId,
+            },
+          });
+
+          if (attemptQuestion) {
+            const optionsWithQuestionId = optionSnapshots.map((opt) => ({
+              ...opt,
+              questionId: attemptQuestion.id,
+            }));
+            await tx.examAttemptOption.createMany({
+              data: optionsWithQuestionId,
+            });
+          }
+        }
+      }
+
+      // Save answers by setting isSelected on options
+      for (const answer of dto.answers) {
+        // Find the attempt question
+        const attemptQuestion = await tx.examAttemptQuestion.findFirst({
+          where: {
+            attemptId: attempt.id,
+            questionId: answer.questionId,
+          },
+        });
+
+        if (!attemptQuestion) continue;
+
+        // Reset all options for this question to not selected
+        await tx.examAttemptOption.updateMany({
+          where: {
+            questionId: attemptQuestion.id,
+          },
+          data: {
+            isSelected: false,
+          },
+        });
+
+        // Set the selected option
+        await tx.examAttemptOption.updateMany({
+          where: {
+            questionId: attemptQuestion.id,
+            originalOptionId: answer.optionId,
+          },
+          data: {
+            isSelected: true,
+          },
+        });
+      }
 
       // Auto grading
       let score = 0;
 
-      const validOptions = await tx.option.findMany({
+      // Create a map of user answers for easier lookup
+      const userAnswersMap = new Map(
+        dto.answers.map((a) => [a.questionId, a.optionId]),
+      );
+
+      // Get all correct options for the questions in this exam
+      const correctOptions = await tx.option.findMany({
         where: {
-          OR: dto.answers.map((p) => ({
-            id: p.optionId,
-            questionId: p.questionId,
-          })),
+          questionId: {
+            in: attempt.exam.questions.map((q) => q.questionId),
+          },
+          isCorrect: true,
+        },
+        select: {
+          id: true,
+          questionId: true,
         },
       });
 
+      // Create exam questions score map
       const examQuestionsMap = new Map(
         attempt.exam.questions.map((q) => [q.questionId, q.score ?? 0]),
       );
 
-      for (const so of validOptions) {
-        const qScore = examQuestionsMap.get(so.questionId);
-        if (so?.isCorrect && qScore) {
-          score += qScore;
+      // Grade each question
+      for (const correctOption of correctOptions) {
+        const userSelectedOptionId = userAnswersMap.get(
+          correctOption.questionId,
+        );
+        if (userSelectedOptionId === correctOption.id) {
+          const qScore = examQuestionsMap.get(correctOption.questionId);
+          if (qScore) {
+            score += qScore;
+          }
         }
       }
 
@@ -299,18 +399,12 @@ export class ExamAttemptsService {
     const attempt = await this.prisma.examAttempt.findUnique({
       where: { userId_examId: { userId, examId } },
       include: {
-        exam: {
+        questions: {
           include: {
-            questions: {
-              include: {
-                question: {
-                  include: { options: true },
-                },
-              },
-            },
+            options: true,
           },
+          orderBy: { order: 'asc' },
         },
-        answers: true,
       },
     });
 
@@ -318,25 +412,34 @@ export class ExamAttemptsService {
       throw new BadRequestException('Exam not completed');
     }
 
-    const answersMap = new Map(
-      attempt.answers.map((a) => [a.questionId, a.optionId]),
-    );
+    const questions = attempt.questions.map((q) => {
+      const selectedOption = q.options.find((opt) => opt.isSelected);
+      const correctOption = q.options.find((opt) => opt.isCorrect);
 
-    const questions = attempt.exam.questions.map((eq) => ({
-      id: eq.questionId,
-      content: eq.question.content,
-      selectedOptionId: answersMap.get(eq.questionId),
-      correctOptionId: eq.question.options.find((o) => o.isCorrect)?.id,
-      isCorrect:
-        answersMap.get(eq.questionId) ===
-        eq.question.options.find((o) => o.isCorrect)?.id,
-      score: eq.score,
-    }));
+      return {
+        id: q.questionId,
+        content: q.content,
+        tags: q.tags,
+        selectedOptionId: selectedOption?.originalOptionId || null,
+        selectedOptionContent: selectedOption?.content || null,
+        correctOptionId: correctOption?.originalOptionId || null,
+        correctOptionContent: correctOption?.content || null,
+        isCorrect: selectedOption?.isCorrect || false,
+        score: q.score,
+      };
+    });
+
+    // Calculate total score from all questions
+    const totalScore = attempt.questions.reduce(
+      (sum, q) => sum + (q.score || 0),
+      0,
+    );
 
     return {
       examId,
       score: attempt.score,
-      pass: Number(attempt.score) >= attempt.exam.passScore,
+      totalScore,
+      pass: Number(attempt.score) >= (attempt.passScore || 0),
       questions,
     };
   }

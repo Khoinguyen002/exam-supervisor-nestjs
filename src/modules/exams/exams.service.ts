@@ -192,9 +192,11 @@ export class ExamsService {
     const exam = await this.prisma.exam.findUnique({ where: { id } });
     if (!exam) throw new NotFoundException('Exam not found');
 
-    // Prevent editing ended exams
-    if (exam.status === 'ENDED') {
-      throw new BadRequestException('Cannot edit an exam that has ended');
+    // Prevent editing exams that are running, ended, or archived
+    if (['RUNNING', 'ENDED', 'ARCHIVED'].includes(exam.status)) {
+      throw new BadRequestException(
+        `Cannot edit an exam with status ${exam.status}`,
+      );
     }
 
     const { questions, ...examData } = dto;
@@ -209,8 +211,8 @@ export class ExamsService {
       },
     });
 
-    // Handle questions update if provided
-    if (questions !== undefined) {
+    // Handle questions update if provided and not empty
+    if (questions !== undefined && questions.length > 0) {
       // Get existing questions for this exam
       const existingQuestions = await this.prisma.examQuestion.findMany({
         where: { examId: id },
@@ -462,7 +464,6 @@ export class ExamsService {
             },
             orderBy: { order: 'asc' },
           },
-          answers: true,
         },
       }),
       this.prisma.examAttempt.count({
@@ -472,15 +473,8 @@ export class ExamsService {
 
     // Transform the data to include detailed question/answer information
     const transformedItems = items.map((attempt: any) => {
-      const answersMap = new Map(
-        attempt.answers.map((a: any) => [a.questionId, a.optionId]),
-      );
-
       const questionsWithAnswers = attempt.questions.map((q) => {
-        const selectedOptionId = answersMap.get(q.questionId);
-        const selectedOption = selectedOptionId
-          ? q.options.find((opt) => opt.id === selectedOptionId) || null
-          : null;
+        const selectedOption = q.options.find((opt) => opt.isSelected);
         const isCorrect = selectedOption?.isCorrect || false;
 
         return {

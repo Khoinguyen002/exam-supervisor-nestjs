@@ -1,4 +1,10 @@
-import { IsArray, IsNotEmpty, IsString, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { CreateOptionDto } from './create-option.dto';
 
@@ -6,6 +12,11 @@ export class CreateQuestionDto {
   @IsString()
   @IsNotEmpty()
   content: string;
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  tags?: string[];
 
   @IsArray()
   @ValidateNested({ each: true })
