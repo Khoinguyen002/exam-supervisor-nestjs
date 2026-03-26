@@ -34,8 +34,11 @@ export class QuestionsService {
     });
   }
 
-  async findAll() {
+  async findAll(search?: string) {
     const items = await this.prisma.question.findMany({
+      where: search
+        ? { content: { contains: search, mode: 'insensitive' } }
+        : undefined,
       include: { options: true },
       orderBy: { createdAt: 'desc' },
     });

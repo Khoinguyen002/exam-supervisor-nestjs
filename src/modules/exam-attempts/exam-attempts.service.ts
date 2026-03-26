@@ -426,6 +426,12 @@ export class ExamAttemptsService {
         correctOptionContent: correctOption?.content || null,
         isCorrect: selectedOption?.isCorrect || false,
         score: q.score,
+        options: q.options.map((opt) => ({
+          id: opt.originalOptionId,
+          content: opt.content,
+          isCorrect: opt.isCorrect,
+          isSelected: opt.isSelected,
+        })),
       };
     });
 

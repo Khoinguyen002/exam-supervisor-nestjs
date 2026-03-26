@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   Delete,
+  Query,
 } from '@nestjs/common';
 import { QuestionsService } from './questions.service';
 import { CreateQuestionDto } from './dto/create-question.dto';
@@ -27,8 +28,8 @@ export class QuestionsController {
 
   @ApiListResponse('Get questions successfully')
   @Get()
-  findAll() {
-    return this.service.findAll();
+  findAll(@Query('search') search?: string) {
+    return this.service.findAll(search);
   }
 
   @ApiResponse('Get question successfully')

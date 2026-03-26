@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -58,5 +59,12 @@ export class UsersController {
     @Body() body: UpdateUserRoleDto,
   ): UserResponseDto {
     return plainToInstance(UserResponseDto, this.usersService.update(id, body));
+  }
+
+  @Roles('ADMIN')
+  @Delete('admin/users/:id')
+  async remove(@Param('id') id: string) {
+    await this.usersService.delete(id);
+    return { message: 'User deleted successfully' };
   }
 }

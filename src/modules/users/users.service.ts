@@ -76,4 +76,10 @@ export class UsersService {
       },
     });
   }
+
+  delete(id: string) {
+    return this.prisma.user.delete({
+      where: { id },
+    });
+  }
 }
